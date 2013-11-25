@@ -1,0 +1,26 @@
+{
+  "name": "nodebb-plugin-archiver",
+  "version": "0.1.0",
+  "description": "Archival Plugin for NodeBB, that automatically locks topics after a certain level of inactivity",
+  "main": "index.js",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/julianlam/nodebb-plugin-archiver.git"
+  },
+  "keywords": [
+    "nodebb",
+    "plugin",
+    "archive"
+  ],
+  "author": "Julian Lam <julian@designcreateplay.com>",
+  "license": "BSD-2-Clause",
+  "bugs": {
+    "url": "https://github.com/julianlam/nodebb-plugin-archiver/issues"
+  },
+  "homepage": "https://github.com/julianlam/nodebb-plugin-archiver",
+  "dependencies": {
+    "cron": "~1.0.1",
+    "async": "~0.2.9",
+    "path": "~0.4.9"
+  }
+}

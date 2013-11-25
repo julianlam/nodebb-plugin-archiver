@@ -1,0 +1,12 @@
+{
+    "id": "nodebb-plugin-archiver",
+    "name": "Topic Archiver",
+    "description": "Archiver Plugin for NodeBB, so that posts after a certain number of days are automatically locked",
+    "url": "https://github.com/julianlam/nodebb-plugin-archiver",
+    "library": "./index.js",
+    "hooks": [
+        { "hook": "action:app.load", "method": "start" },
+        { "hook": "filter:admin.header.build", "method": "admin.menu", "callbacked": false },
+        { "hook": "filter:admin.create_routes", "method": "admin.route", "callbacked": true }
+    ]
+}
