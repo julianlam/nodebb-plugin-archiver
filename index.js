@@ -4,7 +4,7 @@ var	cronJob = require('cron').CronJob,
 	path = require('path'),
 
 	winston = module.parent.require('winston'),
-	RDB = module.parent.require('./redis'),
+	db = module.parent.require('./database'),
 	Topics = module.parent.require('./topics'),
 	ThreadTools = module.parent.require('./threadTools'),
 
@@ -14,11 +14,11 @@ Archiver.config = {};
 
 Archiver.start = function() {
 	// Setup
-	RDB.hmget('config', 'archiver:active', 'archiver:type', 'archiver:cutoff', function(err, values) {
+	db.getObjectFields('config', ['archiver:active', 'archiver:type', 'archiver:cutoff'], function(err, values) {
 		Archiver.config = {
-			active: values[0] || '0',
-			type: values[1] || 'activity',
-			cutoff: values[2] || '7'
+			active: values['archiver:active'] || '0',
+			type: values['archiver:type'] || 'activity',
+			cutoff: values['archiver:cutoff'] || '7'
 		};
 
 		// Cron
@@ -37,10 +37,10 @@ Archiver.start = function() {
 Archiver.execute = function() {
 	var	cutoffDate = Date.now() - (60000 * 60 * 24 * parseInt(Archiver.config.cutoff, 10));
 
-	RDB.smembers('topics:tid', function(err, tids) {
+	db.getSetMembers('topics:tid', function(err, tids) {
 		async.each(tids, function(tid, next) {
 			Topics.getTopicData(tid, function(err, topicObj) {
-				console.log(topicObj.lastposttime);
+				
 				switch(Archiver.config.type) {
 					case 'hard':
 						if (topicObj.timestamp <= cutoffDate) {
