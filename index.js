@@ -1,29 +1,39 @@
+'use strict';
+/* globals module, require, process */
+
 var	cronJob = require('cron').CronJob,
 	async = require('async'),
-	fs = require('fs'),
-	path = require('path'),
 
 	winston = module.parent.require('winston'),
 	db = module.parent.require('./database'),
 	Topics = module.parent.require('./topics'),
+	meta = module.parent.require('./meta'),
 	ThreadTools = module.parent.require('./threadTools'),
 
 	Archiver = {};
 
 Archiver.config = {};
 
-Archiver.start = function() {
+Archiver.start = function(data, callback) {
+	function render(req, res, next) {
+		res.render('admin/plugins/archiver', {});
+	}
+
+	data.router.get('/admin/plugins/archiver', data.middleware.admin.buildHeader, render);
+	data.router.get('/api/admin/plugins/archiver', render);
+
 	// Setup
-	db.getObjectFields('config', ['archiver:active', 'archiver:type', 'archiver:cutoff'], function(err, values) {
+	meta.settings.get('archiver', function(err, values) {
+	// db.getObjectFields('config', ['archiver:active', 'archiver:type', 'archiver:cutoff'], function(err, values) {
 		Archiver.config = {
-			active: values['archiver:active'] || '0',
-			type: values['archiver:type'] || 'activity',
-			cutoff: values['archiver:cutoff'] || '7'
+			active: values.active === 'on' ? true : false,
+			type: values.type || 'activity',
+			cutoff: values.cutoff || '7'
 		};
 
 		// Cron
-		if (Archiver.config.active === '1') {
-			new cronJob(/*'0 0 0 * * *'*/new Date(Date.now() + 1500), function() {
+		if (Archiver.config.active) {
+			new cronJob('0 0 0 * * *', function() {
 				if (process.env.NODE_ENV === 'development') {
 					winston.info('[plugin.archiver] Checking for expired topics');
 				}
@@ -31,14 +41,16 @@ Archiver.start = function() {
 				Archiver.execute();
 			}, null, true);
 		}
+
+		callback();
 	});
 };
 
 Archiver.execute = function() {
 	var	cutoffDate = Date.now() - (60000 * 60 * 24 * parseInt(Archiver.config.cutoff, 10));
 
-	db.getSetMembers('topics:tid', function(err, tids) {
-		async.each(tids, function(tid, next) {
+	db.getSortedSetRevRangeByScore('topics:tid', 0, -1, cutoffDate, -Infinity, function(err, tids) {
+		async.eachLimit(tids, 5, function(tid, next) {
 			Topics.getTopicData(tid, function(err, topicObj) {
 				
 				switch(Archiver.config.type) {
@@ -48,7 +60,7 @@ Archiver.execute = function() {
 								winston.info('[plugin.archiver] Locking topic ' + tid);
 							}
 
-							ThreadTools.lock(topicObj.tid);
+							ThreadTools.lock(topicObj.tid, 0, next);
 						}
 						break;
 
@@ -58,14 +70,16 @@ Archiver.execute = function() {
 								winston.info('[plugin.archiver] Locking topic ' + tid);
 							}
 
-							ThreadTools.lock(topicObj.tid);
+							ThreadTools.lock(topicObj.tid, 0, next);
 						}
 						break;
-				}
 
-				next();
+					default:
+						next();
+						break;
+				}
 			});
-		}, function(err) {
+		}, function() {
 			if (process.env.NODE_ENV === 'development') {
 				winston.info('[plugin.archiver] Finished archiving topics.');
 			}
@@ -77,31 +91,12 @@ Archiver.execute = function() {
 Archiver.admin = {
 	menu: function(custom_header, callback) {
 		custom_header.plugins.push({
-			"route": '/plugins/archiver',
-			"icon": 'icon-edit',
-			"name": 'Archiver'
+			'route': '/plugins/archiver',
+			'icon': 'icon-edit',
+			'name': 'Archiver'
 		});
 
-		return custom_header;
-	},
-	route: function(custom_routes, callback) {
-		fs.readFile(path.join(__dirname, 'admin.tpl'), function(err, tpl) {
-			custom_routes.routes.push({
-				route: '/plugins/archiver',
-				method: "get",
-				options: function(req, res, callback) {
-					callback({
-						req: req,
-						res: res,
-						route: '/plugins/archiver',
-						name: 'Archiver',
-						content: tpl
-					});
-				}
-			});
-
-			callback(null, custom_routes);
-		});
+		callback(null, custom_header);
 	}
 };
 

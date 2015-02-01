@@ -5,8 +5,9 @@
     "url": "https://github.com/julianlam/nodebb-plugin-archiver",
     "library": "./index.js",
     "hooks": [
-        { "hook": "action:app.load", "method": "start" },
+        { "hook": "static:app.load", "method": "start" },
         { "hook": "filter:admin.header.build", "method": "admin.menu", "callbacked": false },
         { "hook": "filter:admin.create_routes", "method": "admin.route", "callbacked": true }
-    ]
+    ],
+    "templates": "templates"
 }
