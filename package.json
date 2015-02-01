@@ -22,5 +22,8 @@
     "cron": "~1.0.1",
     "async": "~0.2.9",
     "path": "~0.4.9"
+  },
+  "nbbpm": {
+    "compatibility": "^0.4.0"
   }
 }
