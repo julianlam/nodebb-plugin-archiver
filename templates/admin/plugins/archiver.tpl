@@ -16,36 +16,55 @@
 
 						<div class="row">
 							<div class="form-group col-sm-6">
-								<label for="type">Type</label>
-								<select class="form-control" name="type" id="type">
-									<option value="hard">Hard -- Topics will be archived after the specified # of days</option>
-									<option value="activity">Activity -- Topics will be archived after there has been no activity for the specified # of days</option>
-								</select>
+								<div class="form-group">
+									<label for="type">Type</label>
+									<select class="form-control" name="type" id="type">
+										<option value="hard">Hard -- Topics will be archived after the specified # of days</option>
+										<option value="activity">Activity -- Topics will be archived after there has been no activity for the specified # of days</option>
+									</select>
+								</div>
+								<div class="form-group">
+									<label for="cutoff">Archive topics after this many days</label>
+									<input class="form-control" type="number" name="cutoff" id="cutoff" />
+								</div>
+								<div class="form-group">
+									<label for="cids">Limit archival to the following categories</label>
+									<select class="form-control" name="cids" id="cids" multiple="true">
+										<!-- BEGIN categories -->
+										<option value="{../cid}">{../name} (cid: {../cid})</option>
+										<!-- END -->
+									</select>
+								</div>
 							</div>
 							<div class="form-group col-sm-6">
-								<label for="cutoff">Archive topics after this many days</label>
-								<input class="form-control" type="number" name="cutoff" id="cutoff" />
-							</div>
-						</div>
-						<div class="row">
-							<div class="form-group col-sm-6">
-								<label for="action">Action</label>
-								<select class="form-control" name="action" id="action">
-									<option value="lock">Lock (default) &mdash; Topics will be locked</option>
-									<option value="delete">Delete &mdash; Topics will be soft deleted</option>
-									<option value="purge">Purge &mdash; Topics will be deleted and removed from the database (irreversible!)</option>
-								</select>
-							</div>
-							<div class="form-group col-sm-6">
-								<label for="lowerBound">Lower bound for capturing topics</label>
-								<input class="form-control" type="number" name="lowerBound" id="lowerBound" />
-								<p class="help-block">
-									This value is automatically updated every time the archiver is run. It is necessary
-									so that a subset of topics are scanned/locked every invocation of the archiver.
-									Otherwise, the larger the dataset, the more topics are scanned (or in many cases,
-									re-scanned) unnecessarily. To instruct the archiver to scan all topics, change this
-									value back to zero.
-								</p>
+								<div class="form-group">
+									<label for="action">Action</label>
+									<select class="form-control" name="action" id="action">
+										<option value="lock">Lock (default) &mdash; Topics will be locked</option>
+										<option value="delete">Delete &mdash; Topics will be soft deleted</option>
+										<option value="purge">Purge &mdash; Topics will be deleted and removed from the database (irreversible!)</option>
+									</select>
+								</div>
+								<div class="form-group">
+									<label for="uid">Act as uid...</label>
+									<input class="form-control" type="number" name="uid" id="uid" placeholder="1" />
+									<p class="help-block">
+										By default this plugin will try to lock topics as uid 1. However, that user
+										may not be an administrative user (or even exist), in which case an alternative
+										uid of an administrative user should be supplied here.
+									</p>
+								</div>
+								<div class="form-group">
+									<label for="lowerBound">Lower bound for capturing topics</label>
+									<input class="form-control" type="number" name="lowerBound" id="lowerBound" />
+									<p class="help-block">
+										This value is automatically updated every time the archiver is run. It is necessary
+										so that a subset of topics are scanned/locked every invocation of the archiver.
+										Otherwise, the larger the dataset, the more topics are scanned (or in many cases,
+										re-scanned) unnecessarily. To instruct the archiver to scan all topics, change this
+										value back to zero.
+									</p>
+								</div>
 							</div>
 						</div>
 					</fieldset>
