@@ -11,6 +11,9 @@
 								Archive Topics
 							</label>
 						</div>
+
+						<hr />
+
 						<div class="row">
 							<div class="form-group col-sm-6">
 								<label for="type">Type</label>
@@ -22,6 +25,27 @@
 							<div class="form-group col-sm-6">
 								<label for="cutoff">Archive topics after this many days</label>
 								<input class="form-control" type="number" name="cutoff" id="cutoff" />
+							</div>
+						</div>
+						<div class="row">
+							<div class="form-group col-sm-6">
+								<label for="action">Action</label>
+								<select class="form-control" name="action" id="action">
+									<option value="lock">Lock (default) &mdash; Topics will be locked</option>
+									<option value="delete">Delete &mdash; Topics will be soft deleted</option>
+									<option value="purge">Purge &mdash; Topics will be deleted and removed from the database (irreversible!)</option>
+								</select>
+							</div>
+							<div class="form-group col-sm-6">
+								<label for="lowerBound">Lower bound for capturing topics</label>
+								<input class="form-control" type="number" name="lowerBound" id="lowerBound" />
+								<p class="help-block">
+									This value is automatically updated every time the archiver is run. It is necessary
+									so that a subset of topics are scanned/locked every invocation of the archiver.
+									Otherwise, the larger the dataset, the more topics are scanned (or in many cases,
+									re-scanned) unnecessarily. To instruct the archiver to scan all topics, change this
+									value back to zero.
+								</p>
 							</div>
 						</div>
 					</fieldset>

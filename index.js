@@ -6,9 +6,8 @@ var	cronJob = require('cron').CronJob,
 
 	winston = module.parent.require('winston'),
 	db = module.parent.require('./database'),
-	Topics = module.parent.require('./topics'),
+	topics = module.parent.require('./topics'),
 	meta = module.parent.require('./meta'),
-	ThreadTools = module.parent.require('./threadTools'),
 
 	Archiver = {};
 
@@ -24,20 +23,18 @@ Archiver.start = function(data, callback) {
 
 	// Setup
 	meta.settings.get('archiver', function(err, values) {
-	// db.getObjectFields('config', ['archiver:active', 'archiver:type', 'archiver:cutoff'], function(err, values) {
 		Archiver.config = {
 			active: values.active === 'on' ? true : false,
 			type: values.type || 'activity',
-			cutoff: values.cutoff || '7'
+			cutoff: values.cutoff || '7',
+			lowerBound: parseInt(values.lowerBound, 10) || 0,
 		};
 
 		// Cron
 		if (Archiver.config.active) {
+			// new cronJob(new Date(Date.now() + 1000), function () {	// For debugging purposes only
 			new cronJob('0 0 0 * * *', function() {
-				if (process.env.NODE_ENV === 'development') {
-					winston.info('[plugin.archiver] Checking for expired topics');
-				}
-
+				winston.verbose('[plugin.archiver] Checking for expired topics');
 				Archiver.execute();
 			}, null, true);
 		}
@@ -48,42 +45,49 @@ Archiver.start = function(data, callback) {
 
 Archiver.execute = function() {
 	var	cutoffDate = Date.now() - (60000 * 60 * 24 * parseInt(Archiver.config.cutoff, 10));
+	var now = Date.now();
 
-	db.getSortedSetRevRangeByScore('topics:tid', 0, -1, cutoffDate, -Infinity, function(err, tids) {
+	/**
+	 * Hey, add a thing to do lock/unlock via specific uid.
+	 */
+
+	db.getSortedSetRevRangeByScore('topics:tid', 0, -1, cutoffDate, parseInt(Archiver.config.lowerBound, 10), function(err, tids) {
 		async.eachLimit(tids, 5, function(tid, next) {
-			Topics.getTopicData(tid, function(err, topicObj) {
-				
+			topics.getTopicData(tid, function(err, topicObj) {
 				switch(Archiver.config.type) {
 					case 'hard':
 						if (topicObj.timestamp <= cutoffDate) {
-							if (process.env.NODE_ENV === 'development') {
-								winston.info('[plugin.archiver] Locking topic ' + tid);
-							}
-
-							ThreadTools.lock(topicObj.tid, 0, next);
+							winston.verbose('[plugin.archiver] Locking topic ' + tid);
+							return topics.tools.lock(topicObj.tid, 0, next);
 						}
 						break;
 
 					case 'activity':
 						if (topicObj.lastposttime <= cutoffDate) {
-							if (process.env.NODE_ENV === 'development') {
-								winston.info('[plugin.archiver] Locking topic ' + tid);
-							}
-
-							ThreadTools.lock(topicObj.tid, 0, next);
+							winston.verbose('[plugin.archiver] Locking topic ' + tid);
+							return topics.tools.lock(topicObj.tid, 0, next);
 						}
 						break;
 
 					default:
-						next();
+						return next();
 						break;
 				}
+				
+				process.nextTick(next);
 			});
-		}, function() {
-			if (process.env.NODE_ENV === 'development') {
-				winston.info('[plugin.archiver] Finished archiving topics.');
+		}, function(err) {
+			if (err) {
+				return winston.error('[plugin.archiver] Unable to archive topics: ' + err.message);
 			}
 
+			winston.verbose('[plugin.archiver] Finished archiving topics.');
+
+			// Update lowerBound
+			meta.settings.set('archiver', {
+				lowerBound: now,
+			});
+			Archiver.config.lowerBound = now;
 		});
 	});
 };
