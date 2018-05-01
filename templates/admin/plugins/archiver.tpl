@@ -76,31 +76,12 @@
 		<div class="panel panel-default">
 			<div class="panel-heading">Control Panel</div>
 			<div class="panel-body">
-				<button class="btn btn-primary" id="save">Save Settings</button>
+				<div class="btn-block btn-group-vertical">
+					<button class="btn btn-primary" id="save"><i class="fa fa-save"></i> Save Settings</button>
+					<button class="btn btn-warning" id="execute"><i class="fa fa-trash"></i> Run Archiver</button>
+					<button class="btn btn-default" id="test"><i class="fa fa-check-circle-o"></i>Test Run</button>
+				</div>
 			</div>
 		</div>
 	</div>
 </div>
-
-<script>
-	'use strict';
-	/* globals require, $, app, socket */
-
-	require(['settings'], function(Settings) {
-		Settings.load('archiver', $('.archiver-settings'));
-
-		$('#save').on('click', function() {
-			Settings.save('archiver', $('.archiver-settings'), function() {
-				app.alert({
-					type: 'success',
-					alert_id: 'archiver-saved',
-					title: 'Settings Saved',
-					message: 'Please reload your NodeBB to apply these settings',
-					clickfn: function() {
-						socket.emit('admin.reload');
-					}
-				});
-			});
-		});
-	});
-</script>
