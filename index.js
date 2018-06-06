@@ -1,18 +1,22 @@
 'use strict';
 /* globals module, require, process */
 
-var	cronJob = require('cron').CronJob,
-	async = require('async'),
+var	cronJob = require('cron').CronJob;
+var async = require('async');
 
-	winston = module.parent.require('winston'),
-	db = module.parent.require('./database'),
-	topics = module.parent.require('./topics'),
-	meta = module.parent.require('./meta'),
-	categories = module.parent.require('./categories'),
+var winston = module.parent.require('winston');
+var nconf = module.parent.require('nconf');
+var db = module.parent.require('./database');
+var topics = module.parent.require('./topics');
+var meta = module.parent.require('./meta');
+var categories = module.parent.require('./categories');
 
-	Archiver = {};
+var Archiver = module.exports;
 
-Archiver.config = {};
+var archiveCron = new cronJob('0 0 0 * * *', function() {
+	winston.verbose('[plugin.archiver] Checking for expired topics');
+	Archiver.execute();
+}, null, false);
 
 Archiver.start = function(data, callback) {
 	var SocketPlugins = require.main.require('./src/socket.io/plugins');
@@ -36,8 +40,50 @@ Archiver.start = function(data, callback) {
 	data.router.get('/admin/plugins/archiver', data.middleware.admin.buildHeader, render);
 	data.router.get('/api/admin/plugins/archiver', render);
 
-	// Setup
+	var pubsub = require.main.require('./src/pubsub');
+	pubsub.on('action:settings.set.archiver', onSettingsSave);
+
+	getConfig(function (err, config) {
+		if (err) {
+			return callback(err);
+		}
+
+		if (config.active) {
+			reStartCronJobs();
+		}
+
+		callback();
+	});
+};
+
+function onSettingsSave(data) {
+	if (nconf.get('runJobs')) {
+		if (data.active === 'on') {
+			reStartCronJobs();
+		} else {
+			stopCronJobs();
+		}
+	}
+}
+
+function reStartCronJobs() {
+	if (nconf.get('runJobs')) {
+		stopCronJobs();
+		archiveCron.start();
+	}
+}
+
+function stopCronJobs() {
+	if (nconf.get('runJobs')) {
+		archiveCron.stop();
+	}
+}
+
+function getConfig(callback) {
 	meta.settings.get('archiver', function(err, values) {
+		if (err) {
+			return callback(err);
+		}
 		try {
 			values.cids = JSON.parse(values.cids).map(cid => parseInt(cid, 10));
 		} catch (e) {
@@ -45,8 +91,8 @@ Archiver.start = function(data, callback) {
 			values.active === 'off';
 		}
 
-		Archiver.config = {
-			active: values.active === 'on' ? true : false,
+		var config = {
+			active: values.active === 'on',
 			action: values.action || 'lock',
 			type: values.type || 'activity',
 			cutoff: values.cutoff || '7',
@@ -54,66 +100,70 @@ Archiver.start = function(data, callback) {
 			cids: values.cids || [],
 			uid: parseInt(values.uid, 10) || 1,
 		};
-
-		// Cron
-		if (Archiver.config.active) {
-			// new cronJob(new Date(Date.now() + 1000), function () {	// For debugging purposes only
-			new cronJob('0 0 0 * * *', function() {
-				winston.verbose('[plugin.archiver] Checking for expired topics');
-				Archiver.execute();
-			}, null, true);
-		}
-
-		callback();
+		callback(null, config);
 	});
-};
+}
 
 Archiver.findTids = function (callback) {
-	var	cutoffDate = Date.now() - (60000 * 60 * 24 * parseInt(Archiver.config.cutoff, 10));
-
-	var methods = [];
-	if (Archiver.config.cids.length) {
-		Archiver.config.cids.forEach(cid => methods.push('cid:' + cid + ':tids'));
-	} else {
-		methods.push('topics:tid');
-	}
-
-	winston.verbose('[plugins/archiver] Proceeding with sets: ' + methods.toString());
-	methods = methods.map(set => async.apply(db.getSortedSetRevRangeByScore, set, 0, -1, cutoffDate, parseInt(Archiver.config.lowerBound, 10)));
-
-	async.parallel(methods, function (err, results) {
+	getConfig(function (err, config) {
 		if (err) {
 			return callback(err);
 		}
+		var	cutoffDate = Date.now() - (60000 * 60 * 24 * parseInt(config.cutoff, 10));
 
-		let tids = results.reduce(function (memo, cur) {
-			return memo.concat(cur);
-		}).filter((cid, idx, set) => idx === set.indexOf(cid));	// filter dupes
+		var methods = [];
+		if (config.cids.length) {
+			config.cids.forEach(cid => methods.push('cid:' + cid + ':tids'));
+		} else {
+			methods.push('topics:tid');
+		}
 
-		callback(null, tids, cutoffDate);
+		winston.verbose('[plugins/archiver] Proceeding with sets: ' + methods.toString());
+		methods = methods.map(set => async.apply(db.getSortedSetRevRangeByScore, set, 0, -1, cutoffDate, parseInt(config.lowerBound, 10)));
+
+		async.parallel(methods, function (err, results) {
+			if (err) {
+				return callback(err);
+			}
+
+			let tids = results.reduce(function (memo, cur) {
+				return memo.concat(cur);
+			}).filter((cid, idx, set) => idx === set.indexOf(cid));	// filter dupes
+
+			callback(null, tids, cutoffDate);
+		});
 	});
 };
 
 Archiver.execute = function () {
 	var now = Date.now();
-
+	var config;
 	async.waterfall([
-		async.apply(Archiver.findTids),
+		function (next) {
+			getConfig(next);
+		},
+		function (_config, next) {
+			config = _config;
+			Archiver.findTids(next);
+		},
 		function (tids, cutoffDate, next) {
 			async.eachLimit(tids, 5, function(tid, next) {
 				topics.getTopicData(tid, function(err, topicObj) {
-					switch(Archiver.config.type) {
+					if (err) {
+						return next(err);
+					}
+					switch(config.type) {
 						case 'hard':
 							if (topicObj.timestamp <= cutoffDate) {
-								winston.verbose('[plugin.archiver] Archiving (' + Archiver.config.action + ') topic ' + tid);
-								return topics.tools[Archiver.config.action](topicObj.tid, Archiver.config.uid, next);
+								winston.verbose('[plugin.archiver] Archiving (' + config.action + ') topic ' + tid);
+								return topics.tools[config.action](topicObj.tid, config.uid, next);
 							}
 							break;
 
 						case 'activity':
 							if (topicObj.lastposttime <= cutoffDate) {
-								winston.verbose('[plugin.archiver] Archiving (' + Archiver.config.action + ') topic ' + tid);
-								return topics.tools[Archiver.config.action](topicObj.tid, Archiver.config.uid, next);
+								winston.verbose('[plugin.archiver] Archiving (' + config.action + ') topic ' + tid);
+								return topics.tools[config.action](topicObj.tid, config.uid, next);
 							}
 							break;
 
@@ -138,7 +188,6 @@ Archiver.execute = function () {
 		meta.settings.set('archiver', {
 			lowerBound: now,
 		});
-		Archiver.config.lowerBound = now;
 	});
 };
 
@@ -159,5 +208,5 @@ module.exports = {
 	admin: Archiver.admin,
 	execute: Archiver.execute,
 	findTids: Archiver.findTids,
-	getConfig: () => Archiver.config,
+	getConfig: getConfig,
 };

@@ -6,9 +6,9 @@
     "library": "./index.js",
     "hooks": [
         { "hook": "static:app.load", "method": "start" },
-        { "hook": "filter:admin.header.build", "method": "admin.menu", "callbacked": false },
-        { "hook": "filter:admin.create_routes", "method": "admin.route", "callbacked": true }
-    ],
+        { "hook": "filter:admin.header.build", "method": "admin.menu" },
+        { "hook": "filter:admin.create_routes", "method": "admin.route" }
+     ],
     "templates": "templates",
     "acpScripts": [
 		"static/lib/admin.js"

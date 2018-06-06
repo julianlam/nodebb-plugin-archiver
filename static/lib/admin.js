@@ -14,10 +14,7 @@ define('admin/plugins/archiver', ['settings'], function(Settings) {
 					type: 'success',
 					alert_id: 'archiver-saved',
 					title: 'Settings Saved',
-					message: 'Please reload your NodeBB to apply these settings',
-					clickfn: function() {
-						socket.emit('admin.reload');
-					}
+					message: 'Plugin settings saved successfully',
 				});
 			});
 		});
