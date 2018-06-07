@@ -24,6 +24,6 @@
     "path": "^0.12.7"
   },
   "nbbpm": {
-    "compatibility": "^1.8.2"
+    "compatibility": "^1.10.0"
   }
 }
