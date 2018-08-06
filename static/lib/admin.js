@@ -28,7 +28,7 @@ define('admin/plugins/archiver', ['settings'], function(Settings) {
 
 				bootbox.alert('\
 					<p>Archiver is currently: ' + (payload.config.active ? 'ENABLED': 'DISABLED') + '</p>\
-					<p>When executed, the following tids will be archived: <blockquote>' + payload.tids.join(',') + '</blockquote></p>\
+					<p>When executed, the following tids will be archived: <blockquote>' + payload.tids.join(', ') + '</blockquote></p>\
 					<p>The configured action is to <strong>' + payload.config.action + '</strong> the listed tids</p>\
 				');
 			});
