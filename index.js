@@ -4,12 +4,12 @@
 var	cronJob = require('cron').CronJob;
 var async = require('async');
 
-var winston = module.parent.require('winston');
-var nconf = module.parent.require('nconf');
-var db = module.parent.require('./database');
-var topics = module.parent.require('./topics');
-var meta = module.parent.require('./meta');
-var categories = module.parent.require('./categories');
+var winston = require.main.require('winston');
+var nconf = require.main.require('nconf');
+var db = require.main.require('./src/database');
+var topics = require.main.require('./src/topics');
+var meta = require.main.require('./src/meta');
+var categories = require.main.require('./src/categories');
 
 var Archiver = module.exports;
 
