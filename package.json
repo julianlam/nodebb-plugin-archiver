@@ -1,6 +1,6 @@
 {
   "name": "nodebb-plugin-archiver",
-  "version": "3.0.2",
+  "version": "3.0.3",
   "description": "Archival Plugin for NodeBB, that automatically locks topics after a certain level of inactivity",
   "main": "index.js",
   "repository": {
