@@ -85,7 +85,9 @@ function getConfig(callback) {
 			return callback(err);
 		}
 		try {
-			values.cids = JSON.parse(values.cids).map(cid => parseInt(cid, 10));
+			if (typeof values.cids === 'string') {
+				values.cids = JSON.parse(values.cids).map(cid => parseInt(cid, 10));
+			}
 		} catch (e) {
 			winston.error('[plugins/archiver] Invalid cids value, disabling archiver.');
 			values.active === 'off';
