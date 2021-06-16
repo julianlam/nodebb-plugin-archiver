@@ -1,20 +1,20 @@
 'use strict';
 
-var async = require('async');
+const async = require('async');
 
-var Archiver = module.parent.exports;
+const meta = require.main.require('./src/meta');
 
-module.exports.test = function (socket, data, callback) {
-	async.parallel({
-		tids: function (next) {
-			Archiver.findTids(function (err, tids, cutOff) {
-				next(err, tids);
-			});
-		},
-		config: function (next) {
-			Archiver.getConfig(next);
-		},
-	}, callback);
+const Archiver = module.parent.exports;
+
+module.exports.test = async () => {
+	const { active, action = 'lock' } = await meta.settings.get('archiver');
+	const tids = await Archiver.findTids();
+
+	return {
+		action,
+		tids,
+		active: active === 'on',
+	};
 };
 
 module.exports.run = function (socket, data, callback) {

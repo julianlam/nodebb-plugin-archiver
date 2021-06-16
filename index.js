@@ -17,7 +17,7 @@ const archiveCron = new cronJob('0 0 0 * * *', (() => {
 	Archiver.execute();
 }), null, false);
 
-Archiver.start = function (data, callback) {
+Archiver.start = async (data) => {
 	const SocketPlugins = require.main.require('./src/socket.io/plugins');
 	SocketPlugins.archiver = require('./websockets');
 
@@ -44,17 +44,10 @@ Archiver.start = function (data, callback) {
 	const pubsub = require.main.require('./src/pubsub');
 	pubsub.on('action:settings.set.archiver', onSettingsSave);
 
-	getConfig((err, config) => {
-		if (err) {
-			return callback(err);
-		}
-
-		if (config.active) {
-			reStartCronJobs();
-		}
-
-		callback();
-	});
+	const { active } = await meta.settings.get('archiver');
+	if (active === 'on') {
+		reStartCronJobs();
+	}
 };
 
 function onSettingsSave(data) {
@@ -107,86 +100,81 @@ function getConfig(callback) {
 	});
 }
 
-Archiver.findTids = function (callback) {
-	getConfig((err, config) => {
-		if (err) {
-			return callback(err);
+Archiver.findTids = async () => {
+	let { cutoff, cids, lowerBound } = await meta.settings.get('archiver');
+	cutoff = Date.now() - (60000 * 60 * 24 * parseInt(cutoff || 7, 10));
+	lowerBound = lowerBound || 0;
+
+	try {
+		if (typeof cids === 'string') {
+			cids = JSON.parse(cids).map(cid => parseInt(cid, 10));
 		}
-		const	cutoffDate = Date.now() - (60000 * 60 * 24 * parseInt(config.cutoff, 10));
+	} catch (e) {
+		winston.error('[plugins/archiver] Invalid cids value, disabling archiver.');
+		cids = [];
+	}
 
-		let methods = [];
-		if (config.cids.length) {
-			config.cids.forEach(cid => methods.push(`cid:${cid}:tids`));
-		} else {
-			methods.push('topics:tid');
-		}
+	const sets = [];
+	if (cids.length) {
+		cids.forEach(cid => sets.push(`cid:${cid}:tids`));
+	} else {
+		sets.push('topics:tid');
+	}
 
-		winston.verbose(`[plugins/archiver] Proceeding with sets: ${methods.toString()}`);
-		// eslint-disable-next-line max-len
-		methods = methods.map(set => async.apply(db.getSortedSetRevRangeByScore, set, 0, -1, cutoffDate, parseInt(config.lowerBound, 10)));
+	winston.verbose(`[plugins/archiver] Proceeding with sets: ${sets.toString()}`);
+	const results = await Promise.all(
+		sets.map(async set => await db.getSortedSetRevRangeByScore(set, 0, -1, cutoff, parseInt(lowerBound, 10)))
+	);
 
-		async.parallel(methods, (err, results) => {
-			if (err) {
-				return callback(err);
-			}
-
-			// eslint-disable-next-line max-len
-			const tids = results.reduce((memo, cur) => memo.concat(cur)).filter((cid, idx, set) => idx === set.indexOf(cid));	// filter dupes
-
-			callback(null, tids, cutoffDate);
-		});
-	});
+	return results
+		.reduce((memo, cur) => memo.concat(cur))
+		.filter((cid, idx, set) => idx === set.indexOf(cid));	// filter dupes
 };
 
-Archiver.execute = function () {
+Archiver.execute = async () => {
 	const now = Date.now();
-	let config;
-	async.waterfall([
-		function (next) {
-			getConfig(next);
-		},
-		function (_config, next) {
-			config = _config;
-			Archiver.findTids(next);
-		},
-		function (tids, cutoffDate, next) {
-			async.eachLimit(tids, 5, (tid, next) => {
-				topics.getTopicData(tid, (err, topicObj) => {
-					if (err) {
-						return next(err);
+	let { type, cutoff, action, uid } = await meta.settings.get('archiver');
+	type = type || 'activity';
+	cutoff = Date.now() - (60000 * 60 * 24 * parseInt(cutoff, 10));
+	action = action || 'lock';
+	uid = uid || 1;
+
+	const tids = await Archiver.findTids();
+	async.eachLimit(tids, 5, (tid, next) => {
+		topics.getTopicData(tid, (err, topicObj) => {
+			if (err) {
+				return next(err);
+			}
+			switch (type) {
+				case 'hard':
+					if (topicObj.timestamp <= cutoff) {
+						winston.info(`[plugin.archiver] Archiving (${action}) topic ${tid}`);
+						return topics.tools[action](topicObj.tid, uid, next);
 					}
-					switch (config.type) {
-						case 'hard':
-							if (topicObj.timestamp <= cutoffDate) {
-								winston.verbose(`[plugin.archiver] Archiving (${config.action}) topic ${tid}`);
-								return topics.tools[config.action](topicObj.tid, config.uid, next);
-							}
-							break;
+					break;
 
-						case 'activity':
-							if (topicObj.lastposttime <= cutoffDate) {
-								winston.verbose(`[plugin.archiver] Archiving (${config.action}) topic ${tid}`);
-								return topics.tools[config.action](topicObj.tid, config.uid, next);
-							}
-							break;
-
-						default:
-							return next();
+				case 'activity':
+					if (topicObj.lastposttime <= cutoff) {
+						winston.info(`[plugin.archiver] Archiving (${action}) topic ${tid}`);
+						return topics.tools[action](topicObj.tid, uid, next);
 					}
+					break;
 
-					process.nextTick(next);
-				});
-			}, next);
-		},
-	], (err) => {
+				default:
+					return next();
+			}
+
+			process.nextTick(next);
+		});
+	}, (err) => {
 		if (err) {
 			return winston.error(`[plugin.archiver] Unable to archive topics: ${err.message}`);
 		}
 
-		winston.verbose('[plugin.archiver] Finished archiving topics.');
+		winston.info('[plugin.archiver] Finished archiving topics.');
 
 		// Update lowerBound
-		winston.verbose(`[plugin.archiver] Updating lower bound value to: ${now}`);
+		winston.info(`[plugin.archiver] Updating lower bound value to: ${now}`);
 		meta.settings.set('archiver', {
 			lowerBound: now,
 		});
