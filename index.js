@@ -1,35 +1,36 @@
 'use strict';
-/* globals module, require, process */
 
-var	cronJob = require('cron').CronJob;
-var async = require('async');
+const	cronJob = require('cron').CronJob;
+const async = require('async');
 
-var winston = require.main.require('winston');
-var nconf = require.main.require('nconf');
-var db = require.main.require('./src/database');
-var topics = require.main.require('./src/topics');
-var meta = require.main.require('./src/meta');
-var categories = require.main.require('./src/categories');
+const winston = require.main.require('winston');
+const nconf = require.main.require('nconf');
+const db = require.main.require('./src/database');
+const topics = require.main.require('./src/topics');
+const meta = require.main.require('./src/meta');
+const categories = require.main.require('./src/categories');
 
-var Archiver = module.exports;
+const Archiver = module.exports;
 
-var archiveCron = new cronJob('0 0 0 * * *', function() {
+const archiveCron = new cronJob('0 0 0 * * *', (() => {
 	winston.verbose('[plugin.archiver] Checking for expired topics');
 	Archiver.execute();
-}, null, false);
+}), null, false);
 
-Archiver.start = function(data, callback) {
-	var SocketPlugins = require.main.require('./src/socket.io/plugins');
+Archiver.start = function (data, callback) {
+	const SocketPlugins = require.main.require('./src/socket.io/plugins');
 	SocketPlugins.archiver = require('./websockets');
 
 	function render(req, res, next) {
-		categories.getAllCategories(req.user.uid, function (err, categories) {
-			categories = categories.map(function (category) {
-				return {
-					cid: category.cid,
-					name: category.name
-				}
-			});
+		categories.getAllCategories(req.user.uid, (err, categories) => {
+			if (err) {
+				return next();
+			}
+
+			categories = categories.map(category => ({
+				cid: category.cid,
+				name: category.name,
+			}));
 
 			res.render('admin/plugins/archiver', {
 				categories: categories,
@@ -40,10 +41,10 @@ Archiver.start = function(data, callback) {
 	data.router.get('/admin/plugins/archiver', data.middleware.admin.buildHeader, render);
 	data.router.get('/api/admin/plugins/archiver', render);
 
-	var pubsub = require.main.require('./src/pubsub');
+	const pubsub = require.main.require('./src/pubsub');
 	pubsub.on('action:settings.set.archiver', onSettingsSave);
 
-	getConfig(function (err, config) {
+	getConfig((err, config) => {
 		if (err) {
 			return callback(err);
 		}
@@ -80,7 +81,7 @@ function stopCronJobs() {
 }
 
 function getConfig(callback) {
-	meta.settings.get('archiver', function(err, values) {
+	meta.settings.get('archiver', (err, values) => {
 		if (err) {
 			return callback(err);
 		}
@@ -90,10 +91,10 @@ function getConfig(callback) {
 			}
 		} catch (e) {
 			winston.error('[plugins/archiver] Invalid cids value, disabling archiver.');
-			values.active === 'off';
+			values.active = 'off';
 		}
 
-		var config = {
+		const config = {
 			active: values.active === 'on',
 			action: values.action || 'lock',
 			type: values.type || 'activity',
@@ -107,30 +108,30 @@ function getConfig(callback) {
 }
 
 Archiver.findTids = function (callback) {
-	getConfig(function (err, config) {
+	getConfig((err, config) => {
 		if (err) {
 			return callback(err);
 		}
-		var	cutoffDate = Date.now() - (60000 * 60 * 24 * parseInt(config.cutoff, 10));
+		const	cutoffDate = Date.now() - (60000 * 60 * 24 * parseInt(config.cutoff, 10));
 
-		var methods = [];
+		let methods = [];
 		if (config.cids.length) {
-			config.cids.forEach(cid => methods.push('cid:' + cid + ':tids'));
+			config.cids.forEach(cid => methods.push(`cid:${cid}:tids`));
 		} else {
 			methods.push('topics:tid');
 		}
 
-		winston.verbose('[plugins/archiver] Proceeding with sets: ' + methods.toString());
+		winston.verbose(`[plugins/archiver] Proceeding with sets: ${methods.toString()}`);
+		// eslint-disable-next-line max-len
 		methods = methods.map(set => async.apply(db.getSortedSetRevRangeByScore, set, 0, -1, cutoffDate, parseInt(config.lowerBound, 10)));
 
-		async.parallel(methods, function (err, results) {
+		async.parallel(methods, (err, results) => {
 			if (err) {
 				return callback(err);
 			}
 
-			let tids = results.reduce(function (memo, cur) {
-				return memo.concat(cur);
-			}).filter((cid, idx, set) => idx === set.indexOf(cid));	// filter dupes
+			// eslint-disable-next-line max-len
+			const tids = results.reduce((memo, cur) => memo.concat(cur)).filter((cid, idx, set) => idx === set.indexOf(cid));	// filter dupes
 
 			callback(null, tids, cutoffDate);
 		});
@@ -138,8 +139,8 @@ Archiver.findTids = function (callback) {
 };
 
 Archiver.execute = function () {
-	var now = Date.now();
-	var config;
+	const now = Date.now();
+	let config;
 	async.waterfall([
 		function (next) {
 			getConfig(next);
@@ -149,44 +150,43 @@ Archiver.execute = function () {
 			Archiver.findTids(next);
 		},
 		function (tids, cutoffDate, next) {
-			async.eachLimit(tids, 5, function(tid, next) {
-				topics.getTopicData(tid, function(err, topicObj) {
+			async.eachLimit(tids, 5, (tid, next) => {
+				topics.getTopicData(tid, (err, topicObj) => {
 					if (err) {
 						return next(err);
 					}
-					switch(config.type) {
+					switch (config.type) {
 						case 'hard':
 							if (topicObj.timestamp <= cutoffDate) {
-								winston.verbose('[plugin.archiver] Archiving (' + config.action + ') topic ' + tid);
+								winston.verbose(`[plugin.archiver] Archiving (${config.action}) topic ${tid}`);
 								return topics.tools[config.action](topicObj.tid, config.uid, next);
 							}
 							break;
 
 						case 'activity':
 							if (topicObj.lastposttime <= cutoffDate) {
-								winston.verbose('[plugin.archiver] Archiving (' + config.action + ') topic ' + tid);
+								winston.verbose(`[plugin.archiver] Archiving (${config.action}) topic ${tid}`);
 								return topics.tools[config.action](topicObj.tid, config.uid, next);
 							}
 							break;
 
 						default:
 							return next();
-							break;
 					}
 
 					process.nextTick(next);
 				});
 			}, next);
 		},
-	], function(err) {
+	], (err) => {
 		if (err) {
-			return winston.error('[plugin.archiver] Unable to archive topics: ' + err.message);
+			return winston.error(`[plugin.archiver] Unable to archive topics: ${err.message}`);
 		}
 
 		winston.verbose('[plugin.archiver] Finished archiving topics.');
 
 		// Update lowerBound
-		winston.verbose('[plugin.archiver] Updating lower bound value to: ' + now);
+		winston.verbose(`[plugin.archiver] Updating lower bound value to: ${now}`);
 		meta.settings.set('archiver', {
 			lowerBound: now,
 		});
@@ -194,15 +194,15 @@ Archiver.execute = function () {
 };
 
 Archiver.admin = {
-	menu: function(custom_header, callback) {
+	menu: function (custom_header, callback) {
 		custom_header.plugins.push({
-			'route': '/plugins/archiver',
-			'icon': 'icon-edit',
-			'name': 'Archiver'
+			route: '/plugins/archiver',
+			icon: 'icon-edit',
+			name: 'Archiver',
 		});
 
 		callback(null, custom_header);
-	}
+	},
 };
 
 module.exports = {
