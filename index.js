@@ -73,33 +73,6 @@ function stopCronJobs() {
 	}
 }
 
-function getConfig(callback) {
-	meta.settings.get('archiver', (err, values) => {
-		if (err) {
-			return callback(err);
-		}
-		try {
-			if (typeof values.cids === 'string') {
-				values.cids = JSON.parse(values.cids).map(cid => parseInt(cid, 10));
-			}
-		} catch (e) {
-			winston.error('[plugins/archiver] Invalid cids value, disabling archiver.');
-			values.active = 'off';
-		}
-
-		const config = {
-			active: values.active === 'on',
-			action: values.action || 'lock',
-			type: values.type || 'activity',
-			cutoff: values.cutoff || '7',
-			lowerBound: parseInt(values.lowerBound, 10) || 0,
-			cids: values.cids || [],
-			uid: parseInt(values.uid, 10) || 1,
-		};
-		callback(null, config);
-	});
-}
-
 Archiver.findTids = async () => {
 	let { cutoff, cids, lowerBound } = await meta.settings.get('archiver');
 	cutoff = Date.now() - (60000 * 60 * 24 * parseInt(cutoff || 7, 10));
@@ -198,5 +171,4 @@ module.exports = {
 	admin: Archiver.admin,
 	execute: Archiver.execute,
 	findTids: Archiver.findTids,
-	getConfig: getConfig,
 };
