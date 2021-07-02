@@ -35,6 +35,12 @@
 										<!-- END -->
 									</select>
 								</div>
+								<div class="checkbox">
+									<label class="mdl-switch mdl-js-switch mdl-js-ripple-effect">
+										<input class="mdl-switch__input" type="checkbox" name="excludePins">
+										<span class="mdl-switch__label">Exclude pinned topics</span>
+									</label>
+								</div>
 							</div>
 							<div class="form-group col-sm-6">
 								<div class="form-group">

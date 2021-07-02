@@ -112,24 +112,30 @@ Archiver.execute = async () => {
 	action = action || 'lock';
 	uid = uid || 1;
 
+	const { excludePins } = await meta.settings.get('archiver');
 	const tids = await Archiver.findTids();
 	async.eachLimit(tids, 5, (tid, next) => {
-		topics.getTopicData(tid, (err, topicObj) => {
+		topics.getTopicData(tid, (err, { tid, timestamp, lastposttime, pinned }) => {
 			if (err) {
 				return next(err);
 			}
+
+			if (excludePins === 'on' && !!pinned) {
+				return next();
+			}
+
 			switch (type) {
 				case 'hard':
-					if (topicObj.timestamp <= cutoff) {
+					if (timestamp <= cutoff) {
 						winston.info(`[plugin.archiver] Archiving (${action}) topic ${tid}`);
-						return topics.tools[action](topicObj.tid, uid, next);
+						return topics.tools[action](tid, uid, next);
 					}
 					break;
 
 				case 'activity':
-					if (topicObj.lastposttime <= cutoff) {
+					if (lastposttime <= cutoff) {
 						winston.info(`[plugin.archiver] Archiving (${action}) topic ${tid}`);
-						return topics.tools[action](topicObj.tid, uid, next);
+						return topics.tools[action](tid, uid, next);
 					}
 					break;
 
