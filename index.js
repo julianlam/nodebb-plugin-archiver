@@ -113,7 +113,12 @@ Archiver.execute = async () => {
 	uid = uid || 1;
 
 	const { excludePins } = await meta.settings.get('archiver');
-	const tids = await Archiver.findTids();
+	let tids = await Archiver.findTids();
+
+	// Filter out topics that do not exist (leftover references in topic zsets?)
+	const exists = await topics.exists(tids);
+	tids = tids.filter((tid, idx) => exists[idx]);
+
 	async.eachLimit(tids, 5, (tid, next) => {
 		topics.getTopicData(tid, (err, { tid, timestamp, lastposttime, pinned }) => {
 			if (err) {
