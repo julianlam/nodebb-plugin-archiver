@@ -2,28 +2,21 @@
 
 /* globals $, app, socket, bootbox, define */
 
-define('admin/plugins/archiver', ['settings'], (Settings) => {
+define('admin/plugins/archiver', ['settings', 'alerts'], (Settings, alerts) => {
 	const ACP = {};
 
 	ACP.init = function () {
 		Settings.load('archiver', $('.archiver-settings'));
 
 		$('#save').on('click', () => {
-			Settings.save('archiver', $('.archiver-settings'), () => {
-				app.alert({
-					type: 'success',
-					alert_id: 'archiver-saved',
-					title: 'Settings Saved',
-					message: 'Plugin settings saved successfully',
-				});
-			});
+			Settings.save('archiver', $('.archiver-settings'));
 		});
 
 
 		$('#test').on('click', () => {
 			socket.emit('plugins.archiver.test', {}, (err, payload) => {
 				if (err) {
-					return app.alertError(err.message);
+					return alerts.error(err.message);
 				}
 
 				bootbox.alert(`\

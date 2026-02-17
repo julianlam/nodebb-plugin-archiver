@@ -12,7 +12,7 @@
     "plugin",
     "archive"
   ],
-  "author": "Julian Lam <julian@designcreateplay.com>",
+  "author": "Julian Lam <julian@nodebb.org>",
   "license": "BSD-2-Clause",
   "bugs": {
     "url": "https://github.com/julianlam/nodebb-plugin-archiver/issues"
@@ -45,6 +45,6 @@
     "lint-staged": "10.5.4"
   },
   "nbbpm": {
-    "compatibility": "^1.10.0 || ^2.0.0"
+    "compatibility": "^4.0.0"
   }
 }
